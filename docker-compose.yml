@@ -1,0 +1,37 @@
+version: "3.4"
+services:
+
+  grafeas:
+    # image: dtr.corp-us-east-1.aws.dckr.io/jenkins/grafeas:1.0.0
+    build: 
+      context: .
+      target: build
+    tty: true
+    # command: ["/grafeas-server", "-config", "/app/config.yaml"]
+    command: ["go", "run", "samples/server/go-server/api/server/cmd/server/main.go", "-config", "samples/server/go-server/api/server/config.yaml"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/go/src/github.com/grafeas/grafeas
+    environment:
+      - GRPC_GO_LOG_VERBOSITY_LEVEL=99 
+      - GRPC_GO_LOG_SEVERITY_LEVEL=info
+    networks:
+      - backend
+
+  client:
+    build: 
+      dockerfile: Dockerfile.client
+      context: .
+    tty: true
+    command: ["go", "run", "samples/server/go-server/api/server/cmd/client/main.go", "-host", "grafeas:8000"]
+    volumes:
+      - .:/go/src/github.com/grafeas/grafeas
+    # environment:
+    #   - GRPC_GO_LOG_VERBOSITY_LEVEL=99 
+    #   - GRPC_GO_LOG_SEVERITY_LEVEL=info
+    networks:
+      - backend
+networks:
+  backend:
+    driver: "bridge"

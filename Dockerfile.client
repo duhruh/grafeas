@@ -1,0 +1,7 @@
+FROM golang:1.10.3-alpine
+
+# RUN apk add git gcc musl-dev
+
+COPY . /go/src/github.com/grafeas/grafeas
+
+WORKDIR /go/src/github.com/grafeas/grafeas

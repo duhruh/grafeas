@@ -25,15 +25,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cockroachdb/cmux"
 	pb "github.com/grafeas/grafeas/proto/v1beta1/grafeas_go_proto"
 	prpb "github.com/grafeas/grafeas/proto/v1beta1/project_go_proto"
 	"github.com/grafeas/grafeas/samples/server/go-server/api/server/v1alpha1"
-	"github.com/grafeas/grafeas/server-go"
+	server "github.com/grafeas/grafeas/server-go"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/rs/cors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Config struct {
@@ -60,52 +62,36 @@ func Run(config *Config, storage *server.Storager) {
 	log.Printf("starting grpc server on %s", address)
 
 	var (
-		apiHandler  http.Handler
-		apiListener net.Listener
 		srv         *http.Server
 		ctx         = context.Background()
 		httpMux     = http.NewServeMux()
-		tcpMux      = cmux.New(l)
+
+		grpcServer *grpc.Server
+		restMux *runtime.ServeMux
 	)
 
-	tlsConfig, err := tlsClientConfig(config.CAFile)
+	tlsConfig, err := tlsClientConfig(config.CAFile, config.CertFile, config.KeyFile, address)
 	if err != nil {
 		log.Fatal("Failed to create tls config", err)
 	}
 
+
 	if tlsConfig != nil {
-		cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
-		if err != nil {
-			log.Fatalln("Failed to load certificate files", err)
-		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-		tlsConfig.NextProtos = []string{"h2"}
+		dcreds := credentials.NewTLS(tlsConfig)
 
-		apiListener = tls.NewListener(tcpMux.Match(cmux.Any()), tlsConfig)
-		go func() { handleShutdown(tcpMux.Serve()) }()
-
-		grpcServer := newGrpcServer(tlsConfig, storage)
-		gwmux := newGrpcGatewayServer(ctx, apiListener.Addr().String(), tlsConfig)
-
-		httpMux.Handle("/", gwmux)
-		apiHandler = grpcHandlerFunc(grpcServer, httpMux)
+		grpcServer = newGrpcServer(tlsConfig, storage)
+		restMux, _ = newRestMux(ctx, address, grpc.WithTransportCredentials(dcreds))
 
 		log.Println("grpc server is configured with client certificate authentication")
 	} else {
-		grpcL := tcpMux.Match(cmux.HTTP2HeaderField("content-type", "application/grpc"))
-		apiListener = tcpMux.Match(cmux.Any())
-		go func() { handleShutdown(tcpMux.Serve()) }()
-
-		grpcServer := newGrpcServer(nil, storage)
-		go func() { handleShutdown(grpcServer.Serve(grpcL)) }()
-
-		gwmux := newGrpcGatewayServer(ctx, apiListener.Addr().String(), nil)
-
-		httpMux.Handle("/", gwmux)
-		apiHandler = httpMux
-
+		grpcServer = newGrpcServer(nil, storage)
+		restMux, _ = newRestMux(ctx, address, grpc.WithInsecure())
 		log.Println("grpc server is configured without client certificate authentication")
 	}
+
+	httpMux.Handle("/", restMux)
+
+	mergeHandler := grpcHandlerFunc(grpcServer, httpMux)
 
 	// Setup the CORS middleware. If `config.CORSAllowedOrigins` is empty, no CORS
 	// Origins will be allowed through.
@@ -114,12 +100,12 @@ func Run(config *Config, storage *server.Storager) {
 	})
 
 	srv = &http.Server{
-		Handler:   cors.Handler(apiHandler),
+		Handler:   cors.Handler(h2c.NewHandler(mergeHandler, &http2.Server{})),
 		TLSConfig: tlsConfig,
 	}
 
 	// blocking call
-	handleShutdown(srv.Serve(apiListener))
+	handleShutdown(srv.Serve(l))
 	log.Println("Grpc API stopped")
 }
 
@@ -132,8 +118,34 @@ func handleShutdown(err error) {
 	}
 }
 
-func newGrpcServer(tlsConfig *tls.Config, storage *server.Storager) *grpc.Server {
-	grpcOpts := []grpc.ServerOption{}
+func newRestMux(ctx context.Context, serverAddress string, opts ...grpc.DialOption) (*runtime.ServeMux, error) {
+
+	// Because we run our REST endpoint on the same port as the GRPC the address is the same.
+	upstreamGRPCServerAddress := serverAddress
+
+	// Which multiplexer to register on.
+	gwmux := runtime.NewServeMux(runtime.WithMarshalerOption(runtime.MIMEWildcard,
+		&runtime.JSONPb{OrigName: true, EmitDefaults: true}))
+
+	err := pb.RegisterGrafeasV1Beta1HandlerFromEndpoint(ctx, gwmux, upstreamGRPCServerAddress, opts)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	err = prpb.RegisterProjectsHandlerFromEndpoint(ctx, gwmux, upstreamGRPCServerAddress, opts)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	return gwmux, nil
+}
+
+func newGrpcServer(tlsConfig *tls.Config, storage *server.Storager, opts ...grpc.ServerOption) *grpc.Server {
+	var grpcOpts []grpc.ServerOption
+
+	grpcOpts = append(grpcOpts, opts...) 
 
 	if tlsConfig != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
@@ -143,6 +155,8 @@ func newGrpcServer(tlsConfig *tls.Config, storage *server.Storager) *grpc.Server
 	g := v1alpha1.Grafeas{S: *storage}
 	pb.RegisterGrafeasV1Beta1Server(grpcServer, &g)
 	prpb.RegisterProjectsServer(grpcServer, &g)
+
+	reflection.Register(grpcServer)
 
 	return grpcServer
 }
@@ -200,7 +214,7 @@ func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 //
 // If no CA is given, a nil *tls.Config is returned; no client certificate will
 // be required and verified. In other words, authentication will be disabled.
-func tlsClientConfig(caPath string) (*tls.Config, error) {
+func tlsClientConfig(caPath string, certPath string, keyPath, address string) (*tls.Config, error) {
 	if caPath == "" {
 		return nil, nil
 	}
@@ -217,6 +231,15 @@ func tlsClientConfig(caPath string) (*tls.Config, error) {
 		ClientCAs:  caCertPool,
 		ClientAuth: tls.RequireAndVerifyClientCert,
 	}
+
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	tlsConfig.Certificates = []tls.Certificate{cert}
+	tlsConfig.NextProtos = []string{"h2"}
+	tlsConfig.ServerName = address
 
 	return tlsConfig, nil
 }

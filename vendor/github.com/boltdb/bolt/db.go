@@ -33,7 +33,7 @@ const IgnoreNoSync = runtime.GOOS == "openbsd"
 const (
 	DefaultMaxBatchSize  int = 1000
 	DefaultMaxBatchDelay     = 10 * time.Millisecond
-	DefaultAllocSize         = 1 * 1024 * 1024
+	DefaultAllocSize         = 16 * 1024 * 1024
 )
 
 // default page size for db is set to the OS page size.
