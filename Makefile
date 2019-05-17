@@ -48,7 +48,7 @@ GO_PROTO_FILES_V1 := $(filter-out proto/v1/grafeas_go_proto/project.pb.go, $(pat
 
 # v1alpha1 has a different codebase structure than v1beta1 and v1,
 # so it's generated separately
-go_protos: $(GO_PROTO_FILES_V1) $(GO_PROTO_DIRS_V1BETA1) $(GO_PROTO_FILES_V1)
+go_protos: v1alpha1/proto/grafeas.pb.go $(GO_PROTO_DIRS_V1BETA1) $(GO_PROTO_FILES_V1)
 
 PROTOC_CMD=protoc/bin/protoc -I ./ \
 	-I google/grpc-gateway-1.9.0/third_party/googleapis \
