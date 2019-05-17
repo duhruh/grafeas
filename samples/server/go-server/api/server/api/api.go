@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
+	"net/http" 
 	"os"
 	"strings"
 
@@ -75,16 +75,15 @@ func Run(config *Config, storage *server.Storager) {
 		log.Fatal("Failed to create tls config", err)
 	}
 
-
 	if tlsConfig != nil {
 		dcreds := credentials.NewTLS(tlsConfig)
 
-		grpcServer = newGrpcServer(tlsConfig, storage)
+		grpcServer = newGrpcServer(storage, grpc.Creds(dcreds))
 		restMux, _ = newRestMux(ctx, address, grpc.WithTransportCredentials(dcreds))
 
 		log.Println("grpc server is configured with client certificate authentication")
 	} else {
-		grpcServer = newGrpcServer(nil, storage)
+		grpcServer = newGrpcServer(storage)
 		restMux, _ = newRestMux(ctx, address, grpc.WithInsecure())
 		log.Println("grpc server is configured without client certificate authentication")
 	}
@@ -142,14 +141,10 @@ func newRestMux(ctx context.Context, serverAddress string, opts ...grpc.DialOpti
 	return gwmux, nil
 }
 
-func newGrpcServer(tlsConfig *tls.Config, storage *server.Storager, opts ...grpc.ServerOption) *grpc.Server {
+func newGrpcServer(storage *server.Storager, opts ...grpc.ServerOption) *grpc.Server {
 	var grpcOpts []grpc.ServerOption
 
 	grpcOpts = append(grpcOpts, opts...) 
-
-	if tlsConfig != nil {
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
-	}
 
 	grpcServer := grpc.NewServer(grpcOpts...)
 	g := v1alpha1.Grafeas{S: *storage}
@@ -159,41 +154,6 @@ func newGrpcServer(tlsConfig *tls.Config, storage *server.Storager, opts ...grpc
 	reflection.Register(grpcServer)
 
 	return grpcServer
-}
-
-func newGrpcGatewayServer(ctx context.Context, listenerAddr string, tlsConfig *tls.Config) http.Handler {
-	var (
-		gwTLSConfig *tls.Config
-		gwOpts      []grpc.DialOption
-	)
-
-	if tlsConfig != nil {
-		gwTLSConfig = tlsConfig.Clone()
-		gwTLSConfig.InsecureSkipVerify = true
-		gwOpts = append(gwOpts, grpc.WithTransportCredentials(credentials.NewTLS(gwTLSConfig)))
-	} else {
-		gwOpts = append(gwOpts, grpc.WithInsecure())
-	}
-
-	// changes json serializer to include empty fields with default values
-	jsonOpt := runtime.WithMarshalerOption(runtime.MIMEWildcard, &runtime.JSONPb{EmitDefaults: true})
-	gwmux := runtime.NewServeMux(jsonOpt)
-
-	conn, err := grpc.DialContext(ctx, listenerAddr, gwOpts...)
-	if err != nil {
-		log.Fatal("could not initialize grpc gateway connection")
-	}
-	err = pb.RegisterGrafeasV1Beta1Handler(ctx, gwmux, conn)
-	if err != nil {
-		log.Fatal("could not initialize ancestry grpc gateway")
-	}
-
-	err = prpb.RegisterProjectsHandler(ctx, gwmux, conn)
-	if err != nil {
-		log.Fatal("could not initialize notification grpc gateway")
-	}
-
-	return http.Handler(gwmux)
 }
 
 // grpcHandlerFunc returns an http.Handler that delegates to grpcServer on incoming gRPC
