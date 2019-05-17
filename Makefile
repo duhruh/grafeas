@@ -13,7 +13,7 @@ CLEAN := *~
 
 default: build
 
-.install.tools: .install.protoc-gen-go .install.grpc-gateway protoc/bin/protoc google_protos
+.install.tools: .install.protoc-gen-go .install.grpc-gateway protoc/bin/protoc google/grpc-gateway google/googleapis
 	@touch $@
 
 CLEAN += .install.protoc-gen-go .install.grpc-gateway
@@ -23,7 +23,7 @@ CLEAN += .install.protoc-gen-go .install.grpc-gateway
 .install.grpc-gateway:
 	go get -u -v github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger && touch $@
 
-build: vet fmt go_protos swagger_docs
+build: vendor vet fmt go_protos swagger_docs
 	go build -v ./...
 
 # http://golang.org/cmd/go/#hdr-Run_gofmt_on_package_sources
@@ -35,6 +35,9 @@ test: go_protos
 
 vet: go_protos
 	@go vet -composites=false ./...
+
+vendor: 
+	@go mod vendor
 
 protoc/bin/protoc:
 	mkdir -p protoc
@@ -51,15 +54,19 @@ GO_PROTO_FILES_V1 := $(filter-out proto/v1/grafeas_go_proto/project.pb.go, $(pat
 go_protos: v1alpha1/proto/grafeas.pb.go $(GO_PROTO_DIRS_V1BETA1) $(GO_PROTO_FILES_V1)
 
 PROTOC_CMD=protoc/bin/protoc -I ./ \
-	-I google/grpc-gateway-1.9.0/third_party/googleapis \
-	-I google/grpc-gateway-1.9.0 \
+	-I google/grpc-gateway/third_party/googleapis \
+	-I google/grpc-gateway \
 	-I google/googleapis
 
-google_protos:
-	mkdir -p google
-	curl -sSL https://github.com/grpc-ecosystem/grpc-gateway/archive/v1.9.0.zip -o google/grpc-gateway.zip
-	cd google && unzip grpc-gateway 
+google/googleapis:
 	cd google && git clone https://github.com/googleapis/googleapis.git
+
+google/grpc-gateway:
+	curl -sSL https://github.com/grpc-ecosystem/grpc-gateway/archive/v1.9.0.zip -o google/grpc-gateway.zip
+	cd google && unzip grpc-gateway && mv grpc-gateway-1.9.0 grpc-gateway
+	rm -rf google/grpc-gateway.zip
+
+CLEAN += vendor google/googleapis google/grpc-gateway
 
 v1alpha1/proto/grafeas.pb.go: v1alpha1/proto/grafeas.proto .install.tools
 	$(PROTOC_CMD) \

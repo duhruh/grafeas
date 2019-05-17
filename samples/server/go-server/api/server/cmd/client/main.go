@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	host = flag.String("host", "localhost:8080", "the grafeas server")
+	host    = flag.String("host", "localhost:8080", "the grafeas server")
 	project = flag.String("project", "projects/myproject", "project to list notes of")
 )
 

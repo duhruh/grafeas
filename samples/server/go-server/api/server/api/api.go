@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
-	"net/http" 
+	"net/http"
 	"os"
 	"strings"
 
@@ -31,11 +31,11 @@ import (
 	server "github.com/grafeas/grafeas/server-go"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/rs/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 type Config struct {
@@ -44,11 +44,10 @@ type Config struct {
 	KeyFile            string   `yaml:"keyfile"`              // A PEM encoded private key file
 	CAFile             string   `yaml:"cafile"`               // A PEM eoncoded CA's certificate file
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Permitted CORS origins.
-	ServerName			string 	`yaml:"server_name"`          // Server name to use in tls.Config
+	ServerName         string   `yaml:"server_name"`          // Server name to use in tls.Config
 }
 
-
-func networkAddresFromString(addr string) (string, string){
+func networkAddresFromString(addr string) (string, string) {
 	network, address := "tcp", addr
 	if strings.HasPrefix(addr, "unix://") {
 		network = "unix"
@@ -72,12 +71,12 @@ func Run(config *Config, storage *server.Storager) {
 	log.Printf("starting grpc server on %s", address)
 
 	var (
-		srv         *http.Server
-		grpcServer 	*grpc.Server
-		restMux 	*runtime.ServeMux
-		tlsConfig 	*tls.Config
-		ctx         = context.Background()
-		httpMux     = http.NewServeMux()
+		srv        *http.Server
+		grpcServer *grpc.Server
+		restMux    *runtime.ServeMux
+		tlsConfig  *tls.Config
+		ctx        = context.Background()
+		httpMux    = http.NewServeMux()
 	)
 
 	tlsConfig, err = tlsClientConfig(config.CAFile, config.CertFile, config.KeyFile, config.ServerName)
@@ -109,20 +108,20 @@ func Run(config *Config, storage *server.Storager) {
 	// blocking call
 	if tlsConfig != nil {
 		err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
-	}else {
+	} else {
 		err = srv.Serve(conn)
 	}
 	handleShutdown(err)
 	log.Println("Grpc API stopped")
 }
 
-func getDialOptions(tlsConfig *tls.Config) []grpc.DialOption{
+func getDialOptions(tlsConfig *tls.Config) []grpc.DialOption {
 	var dialOptions []grpc.DialOption
-	
+
 	if tlsConfig != nil {
 		dcreds := credentials.NewTLS(tlsConfig)
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(dcreds))
-	}else {
+	} else {
 		dialOptions = append(dialOptions, grpc.WithInsecure())
 	}
 
@@ -131,7 +130,7 @@ func getDialOptions(tlsConfig *tls.Config) []grpc.DialOption{
 	return dialOptions
 }
 
-func getServerOptions(tlsConfig *tls.Config) []grpc.ServerOption{
+func getServerOptions(tlsConfig *tls.Config) []grpc.ServerOption {
 	var serverOptions []grpc.ServerOption
 
 	if tlsConfig != nil {
@@ -141,7 +140,7 @@ func getServerOptions(tlsConfig *tls.Config) []grpc.ServerOption{
 
 	// more options here
 
-	return  serverOptions
+	return serverOptions
 }
 
 // handleShutdown handles the server shut down error.
@@ -180,7 +179,7 @@ func newRestMux(ctx context.Context, serverAddress string, opts ...grpc.DialOpti
 func newGrpcServer(storage *server.Storager, opts ...grpc.ServerOption) *grpc.Server {
 	var grpcOpts []grpc.ServerOption
 
-	grpcOpts = append(grpcOpts, opts...) 
+	grpcOpts = append(grpcOpts, opts...)
 
 	grpcServer := grpc.NewServer(grpcOpts...)
 	g := v1alpha1.Grafeas{S: *storage}
@@ -225,8 +224,8 @@ func tlsClientConfig(caPath string, certPath string, keyPath, serverName string)
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
-		ClientCAs:  caCertPool,
-		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs:          caCertPool,
+		ClientAuth:         tls.RequireAndVerifyClientCert,
 	}
 
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)

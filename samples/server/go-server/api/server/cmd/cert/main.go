@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
-	"fmt"
-	"flag"
 
 	pb "github.com/grafeas/grafeas/proto/v1beta1/grafeas_go_proto"
 	"google.golang.org/grpc"
@@ -22,16 +22,15 @@ const (
 )
 
 var (
-	host = flag.String("host", "localhost:8000", "the grafeas server")
-	project = flag.String("project", "projects/myproject", "project to list notes of")
+	host     = flag.String("host", "localhost:8000", "the grafeas server")
+	project  = flag.String("project", "projects/myproject", "project to list notes of")
 	certsDir = flag.String("certs", "certs", "the directory where certs are stored all certs should be ca.*")
 )
-
 
 func main() {
 	flag.Parse()
 	// Load client cert
-	cert, err := tls.LoadX509KeyPair(fmt.Sprintf("%v/%v",*certsDir, certFile), fmt.Sprintf("%v/%v", *certsDir, keyFile))
+	cert, err := tls.LoadX509KeyPair(fmt.Sprintf("%v/%v", *certsDir, certFile), fmt.Sprintf("%v/%v", *certsDir, keyFile))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -46,7 +45,7 @@ func main() {
 
 	// Setup HTTPS client
 	tlsConfig := &tls.Config{
-		ServerName: *host,
+		ServerName:   *host,
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      caCertPool,
 	}
