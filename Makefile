@@ -38,7 +38,7 @@ vet: go_protos
 
 protoc/bin/protoc:
 	mkdir -p protoc
-	curl https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-osx-x86_64.zip -o protoc/protoc.zip -L
+	curl https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-linux-x86_64.zip -o protoc/protoc.zip -L
 	unzip protoc/protoc -d protoc
 
 CLEAN += protoc proto/*/*_go_proto
