@@ -13,7 +13,7 @@ CLEAN := *~
 
 default: build
 
-.install.tools: .install.protoc-gen-go .install.grpc-gateway protoc/bin/protoc
+.install.tools: .install.protoc-gen-go .install.grpc-gateway protoc/bin/protoc google_protos
 	@touch $@
 
 CLEAN += .install.protoc-gen-go .install.grpc-gateway
@@ -38,7 +38,7 @@ vet: go_protos
 
 protoc/bin/protoc:
 	mkdir -p protoc
-	curl https://github.com/google/protobuf/releases/download/v3.3.0/protoc-3.3.0-linux-x86_64.zip -o protoc/protoc.zip -L
+	curl https://github.com/protocolbuffers/protobuf/releases/download/v3.7.1/protoc-3.7.1-osx-x86_64.zip -o protoc/protoc.zip -L
 	unzip protoc/protoc -d protoc
 
 CLEAN += protoc proto/*/*_go_proto
@@ -48,12 +48,18 @@ GO_PROTO_FILES_V1 := $(filter-out proto/v1/grafeas_go_proto/project.pb.go, $(pat
 
 # v1alpha1 has a different codebase structure than v1beta1 and v1,
 # so it's generated separately
-go_protos: v1alpha1/proto/grafeas.pb.go $(GO_PROTO_DIRS_V1BETA1) $(GO_PROTO_FILES_V1)
+go_protos: $(GO_PROTO_FILES_V1) $(GO_PROTO_DIRS_V1BETA1) $(GO_PROTO_FILES_V1)
 
 PROTOC_CMD=protoc/bin/protoc -I ./ \
-	-I vendor/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-	-I vendor/github.com/grpc-ecosystem/grpc-gateway \
-	-I vendor/github.com/googleapis/googleapis
+	-I google/grpc-gateway-1.9.0/third_party/googleapis \
+	-I google/grpc-gateway-1.9.0 \
+	-I google/googleapis
+
+google_protos:
+	mkdir -p google
+	curl -sSL https://github.com/grpc-ecosystem/grpc-gateway/archive/v1.9.0.zip -o google/grpc-gateway.zip
+	cd google && unzip grpc-gateway 
+	cd google && git clone https://github.com/googleapis/googleapis.git
 
 v1alpha1/proto/grafeas.pb.go: v1alpha1/proto/grafeas.proto .install.tools
 	$(PROTOC_CMD) \
@@ -102,3 +108,7 @@ proto/v1beta1/swagger/%.swagger.json: proto/v1beta1/%.proto protoc/bin/protoc .i
 clean:
 	go clean ./...
 	rm -rf $(CLEAN)
+
+certs:
+	mkdir certs
+	cd certs && openssl req -newkey rsa:2048 -nodes -keyout ca.key -x509 -days 365 -out ca.crt

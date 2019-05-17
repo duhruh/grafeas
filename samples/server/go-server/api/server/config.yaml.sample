@@ -18,6 +18,7 @@ grafeas:
     # Endpoint address
     address: "0.0.0.0:8080"
     # PKI configuration (optional)
+    server_name: "localhost"
     cafile:
     keyfile:
     certfile:

@@ -4,3 +4,6 @@ protoc
 .install.tools
 proto/**/.done
 proto/v1/*_go_proto/
+google/
+.env
+certs/
