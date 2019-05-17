@@ -108,3 +108,7 @@ proto/v1beta1/swagger/%.swagger.json: proto/v1beta1/%.proto protoc/bin/protoc .i
 clean:
 	go clean ./...
 	rm -rf $(CLEAN)
+
+certs:
+	mkdir certs
+	cd certs && openssl req -newkey rsa:2048 -nodes -keyout ca.key -x509 -days 365 -out ca.crt

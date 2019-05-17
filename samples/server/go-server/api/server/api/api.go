@@ -44,49 +44,52 @@ type Config struct {
 	KeyFile            string   `yaml:"keyfile"`              // A PEM encoded private key file
 	CAFile             string   `yaml:"cafile"`               // A PEM eoncoded CA's certificate file
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Permitted CORS origins.
+	ServerName			string 	`yaml:"server_name"`          // Server name to use in tls.Config
+}
+
+
+func networkAddresFromString(addr string) (string, string){
+	network, address := "tcp", addr
+	if strings.HasPrefix(addr, "unix://") {
+		network = "unix"
+		address = strings.TrimPrefix(addr, "unix://")
+		// Remove existing socket if found
+		os.Remove(address)
+	}
+
+	return network, address
 }
 
 // Run initializes grpc and grpc gateway api services on the same address
 func Run(config *Config, storage *server.Storager) {
-	network, address := "tcp", config.Address
-	if strings.HasPrefix(config.Address, "unix://") {
-		network = "unix"
-		address = strings.TrimPrefix(config.Address, "unix://")
-		// Remove existing socket if found
-		os.Remove(address)
-	}
-	l, err := net.Listen(network, address)
+	network, address := networkAddresFromString(config.Address)
+
+	conn, err := net.Listen(network, address)
 	if err != nil {
 		log.Fatalln("could not listen to address", config.Address)
 	}
+
 	log.Printf("starting grpc server on %s", address)
 
 	var (
 		srv         *http.Server
+		grpcServer 	*grpc.Server
+		restMux 	*runtime.ServeMux
+		tlsConfig 	*tls.Config
 		ctx         = context.Background()
 		httpMux     = http.NewServeMux()
-
-		grpcServer *grpc.Server
-		restMux *runtime.ServeMux
 	)
 
-	tlsConfig, err := tlsClientConfig(config.CAFile, config.CertFile, config.KeyFile, address)
+	tlsConfig, err = tlsClientConfig(config.CAFile, config.CertFile, config.KeyFile, config.ServerName)
 	if err != nil {
 		log.Fatal("Failed to create tls config", err)
 	}
 
-	if tlsConfig != nil {
-		dcreds := credentials.NewTLS(tlsConfig)
+	dialOptions := getDialOptions(tlsConfig)
+	serverOptions := getServerOptions(tlsConfig)
 
-		grpcServer = newGrpcServer(storage, grpc.Creds(dcreds))
-		restMux, _ = newRestMux(ctx, address, grpc.WithTransportCredentials(dcreds))
-
-		log.Println("grpc server is configured with client certificate authentication")
-	} else {
-		grpcServer = newGrpcServer(storage)
-		restMux, _ = newRestMux(ctx, address, grpc.WithInsecure())
-		log.Println("grpc server is configured without client certificate authentication")
-	}
+	grpcServer = newGrpcServer(storage, serverOptions...)
+	restMux, _ = newRestMux(ctx, address, dialOptions...)
 
 	httpMux.Handle("/", restMux)
 
@@ -104,8 +107,41 @@ func Run(config *Config, storage *server.Storager) {
 	}
 
 	// blocking call
-	handleShutdown(srv.Serve(l))
+	if tlsConfig != nil {
+		err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
+	}else {
+		err = srv.Serve(conn)
+	}
+	handleShutdown(err)
 	log.Println("Grpc API stopped")
+}
+
+func getDialOptions(tlsConfig *tls.Config) []grpc.DialOption{
+	var dialOptions []grpc.DialOption
+	
+	if tlsConfig != nil {
+		dcreds := credentials.NewTLS(tlsConfig)
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(dcreds))
+	}else {
+		dialOptions = append(dialOptions, grpc.WithInsecure())
+	}
+
+	// more dial options here
+
+	return dialOptions
+}
+
+func getServerOptions(tlsConfig *tls.Config) []grpc.ServerOption{
+	var serverOptions []grpc.ServerOption
+
+	if tlsConfig != nil {
+		dcreds := credentials.NewTLS(tlsConfig)
+		serverOptions = append(serverOptions, grpc.Creds(dcreds))
+	}
+
+	// more options here
+
+	return  serverOptions
 }
 
 // handleShutdown handles the server shut down error.
@@ -174,7 +210,7 @@ func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 //
 // If no CA is given, a nil *tls.Config is returned; no client certificate will
 // be required and verified. In other words, authentication will be disabled.
-func tlsClientConfig(caPath string, certPath string, keyPath, address string) (*tls.Config, error) {
+func tlsClientConfig(caPath string, certPath string, keyPath, serverName string) (*tls.Config, error) {
 	if caPath == "" {
 		return nil, nil
 	}
@@ -188,6 +224,7 @@ func tlsClientConfig(caPath string, certPath string, keyPath, address string) (*
 	caCertPool.AppendCertsFromPEM(caCert)
 
 	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
 		ClientCAs:  caCertPool,
 		ClientAuth: tls.RequireAndVerifyClientCert,
 	}
@@ -199,7 +236,7 @@ func tlsClientConfig(caPath string, certPath string, keyPath, address string) (*
 
 	tlsConfig.Certificates = []tls.Certificate{cert}
 	tlsConfig.NextProtos = []string{"h2"}
-	tlsConfig.ServerName = address
+	tlsConfig.ServerName = serverName
 
 	return tlsConfig, nil
 }

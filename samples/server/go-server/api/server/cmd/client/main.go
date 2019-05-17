@@ -11,6 +11,7 @@ import (
 
 var (
 	host = flag.String("host", "localhost:8080", "the grafeas server")
+	project = flag.String("project", "projects/myproject", "project to list notes of")
 )
 
 // TODO: rename the below to main() to run with `go run`
@@ -22,7 +23,7 @@ func main() {
 	// List notes
 	resp, err := client.ListNotes(context.Background(),
 		&pb.ListNotesRequest{
-			Parent: "projects/myproject",
+			Parent: *project,
 		})
 	if err != nil {
 		log.Fatal(err)
