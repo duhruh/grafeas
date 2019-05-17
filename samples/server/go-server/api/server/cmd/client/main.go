@@ -14,7 +14,6 @@ var (
 	project = flag.String("project", "projects/myproject", "project to list notes of")
 )
 
-// TODO: rename the below to main() to run with `go run`
 func main() {
 	flag.Parse()
 	conn, err := grpc.Dial(*host, grpc.WithInsecure())

@@ -28,7 +28,6 @@ var (
 )
 
 
-// TODO: rename the below to main() to run with `go run`
 func main() {
 	flag.Parse()
 	// Load client cert
