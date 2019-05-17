@@ -10,7 +10,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/go/src/github.com/grafeas/grafeas
+      - .:/app
     env_file:
       - .env
     networks:
@@ -23,7 +23,7 @@ services:
     tty: true
     command: ["go", "run", "samples/server/go-server/api/server/cmd/client/main.go", "-host", "${GRAFEAS_HOST}", "-project", "${PROJECT}", "-certs", "${CERTS_DIR}"]
     volumes:
-      - .:/go/src/github.com/grafeas/grafeas
+      - .:/app
     env_file:
       - .env
     networks:
@@ -36,7 +36,7 @@ services:
     tty: true
     command: ["go", "run", "samples/server/go-server/api/server/cmd/cert/main.go", "-host", "${GRAFEAS_HOST}", "-project", "${PROJECT}"]
     volumes:
-      - .:/go/src/github.com/grafeas/grafeas
+      - .:/app
     env_file:
       - .env
     networks:
