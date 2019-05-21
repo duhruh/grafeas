@@ -1,0 +1,47 @@
+version: "3.4"
+services:
+
+  grafeas:
+    build:
+      context: .
+      target: dev
+    tty: true
+    command: ["go", "run", "samples/server/go-server/api/server/cmd/server/main.go", "-config", "samples/server/go-server/api/server/config.yaml"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    networks:
+      - backend
+
+  client:
+    build:
+      context: .
+      target: dev
+    tty: true
+    command: ["go", "run", "samples/server/go-server/api/server/cmd/client/main.go", "-host", "${GRAFEAS_HOST}", "-project", "${PROJECT}", "-certs", "${CERTS_DIR}"]
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    networks:
+      - backend
+
+  cert:
+    build:
+      context: .
+      target: dev
+    tty: true
+    command: ["go", "run", "samples/server/go-server/api/server/cmd/cert/main.go", "-host", "${GRAFEAS_HOST}", "-project", "${PROJECT}"]
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: "bridge"
