@@ -4,3 +4,8 @@ services:
   grafeas:
     image: ${IMAGE}
     build: .
+    volumes:
+      - ./samples/server/go-server/api/server/config.yaml:/app/config.yml
+    command: ["-config", "/app/config.yml"]
+    ports:
+      - 8080:8080
