@@ -35,6 +35,7 @@ type ServerConfig struct {
 	KeyFile            string   `yaml:"keyfile"`              // A PEM encoded private key file
 	CAFile             string   `yaml:"cafile"`               // A PEM encoded CA's certificate file
 	CORSAllowedOrigins []string `yaml:"cors_allowed_origins"` // Permitted CORS origins.
+	ServerName         string   `yaml:"server_name"`          // Server name to use in tls.Config
 }
 
 // EmbeddedStoreConfig is the configuration for embedded store.
