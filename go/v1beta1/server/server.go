@@ -68,27 +68,38 @@ func Run(config *config.ServerConfig, db *grafeas.Storage, proj *project.Storage
 
 	httpMux.Handle("/", restMux)
 
-	mergeHandler := grpcHandlerFunc(grpcServer, httpMux)
+	var handler http.Handler
+	handler = grpcHandlerFunc(grpcServer, httpMux)
+	handler = h2c.NewHandler(handler, &http2.Server{})
+	handler = corsHandler(handler, config)
 
-		// Setup the CORS middleware. If `config.CORSAllowedOrigins` is empty, no CORS
-	// Origins will be allowed through.
+	srv = generateServer(handler, tlsConfig)
+	
+	if tlsConfig != nil {
+		conn = tls.NewListener(conn, srv.TLSConfig)
+	}
+
+	// blocking call
+	handleShutdown(srv.Serve(conn))
+
+	log.Println("Grpc API stopped")
+}
+
+func generateServer(handler http.Handler, tlsConfig *tls.Config) *http.Server{
+	return &http.Server{
+		Handler:   handler,
+		TLSConfig: tlsConfig,
+	}
+}
+
+// Setup the CORS middleware. If `config.CORSAllowedOrigins` is empty, no CORS
+// Origins will be allowed through.
+func corsHandler(handler http.Handler, config *config.ServerConfig) http.Handler{
 	cors := cors.New(cors.Options{
 		AllowedOrigins: config.CORSAllowedOrigins,
 	})
 
-	srv = &http.Server{
-		Handler:   cors.Handler(h2c.NewHandler(mergeHandler, &http2.Server{})),
-		TLSConfig: tlsConfig,
-	}
-
-	// blocking call
-	if tlsConfig != nil {
-		err = srv.Serve(tls.NewListener(conn, srv.TLSConfig))
-	} else {
-		err = srv.Serve(conn)
-	}
-	handleShutdown(err)
-	log.Println("Grpc API stopped")
+	return cors.Handler(handler)
 }
 
 func getDialOptions(tlsConfig *tls.Config) []grpc.DialOption {
